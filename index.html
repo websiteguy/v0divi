@@ -133,12 +133,18 @@
                             </svg>
                         </div>
                     </div>
-                    <h3 class="text-lg font-medium text-center text-gray-800 mb-2">Conversion Failed</h3>
+                    <h3 class="text-lg font-medium text-center text-gray-800 mb-2">Conversion Issue</h3>
                     <p id="error-message" class="text-gray-600 text-center mb-6">There was an error processing your file.</p>
                     
-                    <div id="file-debug-info" class="bg-gray-100 p-4 rounded-md mb-6 hidden">
-                        <h4 class="text-md font-medium text-gray-700 mb-2">Debug Information:</h4>
-                        <pre id="debug-text" class="text-xs text-gray-600 overflow-auto max-h-40"></pre>
+                    <div id="file-debug-info" class="bg-gray-100 p-4 rounded-md mb-6 overflow-auto max-h-80">
+                        <h4 class="text-md font-medium text-gray-700 mb-2">Project Structure:</h4>
+                        <pre id="debug-text" class="text-xs text-gray-600 overflow-auto max-h-60"></pre>
+                    </div>
+                    
+                    <div class="mt-4 text-center">
+                        <button id="force-convert" class="px-4 py-2 bg-yellow-600 text-white font-medium rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">
+                            Force Convert Anyway
+                        </button>
                     </div>
                     
                     <div class="mt-6 text-center">
@@ -172,10 +178,12 @@
         const errorContainer = document.getElementById('error-container');
         const errorMessage = document.getElementById('error-message');
         const tryAgainBtn = document.getElementById('try-again');
+        const forceConvertBtn = document.getElementById('force-convert');
         const fileDebugInfo = document.getElementById('file-debug-info');
         const debugText = document.getElementById('debug-text');
 
         let fileToUpload = null;
+        let extractedFiles = {};
         let lastGeneratedJson = null;
 
         // Setup event listeners
@@ -224,9 +232,15 @@
         tryAgainBtn.addEventListener('click', () => {
             resetUI();
         });
+        
+        forceConvertBtn.addEventListener('click', () => {
+            forceConvert();
+        });
 
         // Handle file selection
         function handleFileSelection(file) {
+            console.log("File selected:", file.name, file.size, file.type);
+            
             if (!file.name.toLowerCase().endsWith('.zip')) {
                 showError('Please select a ZIP file.');
                 return;
@@ -274,13 +288,13 @@
                     console.log("ZIP loaded successfully");
                     
                     // Extract the files
-                    const extractedFiles = {};
+                    extractedFiles = {};
                     const filePromises = [];
                     let filesDebugInfo = "Files in ZIP:\n";
                     
                     Object.keys(zipContents.files).forEach(filename => {
-                        filesDebugInfo += "- " + filename + "\n";
                         if (!zipContents.files[filename].dir) {
+                            filesDebugInfo += "- " + filename + "\n";
                             const promise = zipContents.files[filename].async("string")
                                 .then(content => {
                                     extractedFiles[filename] = content;
@@ -300,131 +314,18 @@
                     
                     // Wait for all files to be extracted
                     await Promise.all(filePromises);
-                    console.log("All files extracted successfully");
+                    console.log("All files extracted, count:", Object.keys(extractedFiles).length);
                     
-                    // Find the main HTML/JSX file
-                    let mainFile = null;
-                    let mainFileContent = null;
-
-                    // Debug - log all files found
-                    console.log("Files found in ZIP:", Object.keys(extractedFiles));
-                    filesDebugInfo += "\nExtracted files:\n";
-                    Object.keys(extractedFiles).forEach(file => {
-                        filesDebugInfo += "- " + file + "\n";
-                    });
-
-                    // First try to find index.html or index.jsx
-                    for (const filename of Object.keys(extractedFiles)) {
-                        const lowercaseFilename = filename.toLowerCase();
-                        if (lowercaseFilename.includes("/index.html") || lowercaseFilename.endsWith("index.html") || 
-                            lowercaseFilename.includes("/index.jsx") || lowercaseFilename.endsWith("index.jsx")) {
-                            mainFile = filename;
-                            mainFileContent = extractedFiles[filename];
-                            console.log("Found main index file:", mainFile);
-                            filesDebugInfo += "\nFound main index file: " + mainFile;
-                            break;
-                        }
+                    // Find main content files
+                    const mainFileInfo = findMainContent(extractedFiles);
+                    if (!mainFileInfo) {
+                        throw new Error("Could not find suitable content in the ZIP file");
                     }
-
-                    // Then look for any HTML file
-                    if (!mainFile) {
-                        for (const filename of Object.keys(extractedFiles)) {
-                            const lowercaseFilename = filename.toLowerCase();
-                            if (lowercaseFilename.includes(".html") || lowercaseFilename.endsWith(".html")) {
-                                mainFile = filename;
-                                mainFileContent = extractedFiles[filename];
-                                console.log("Found HTML file:", mainFile);
-                                filesDebugInfo += "\nFound HTML file: " + mainFile;
-                                break;
-                            }
-                        }
-                    }
-
-                    // Then look for any JSX file
-                    if (!mainFile) {
-                        for (const filename of Object.keys(extractedFiles)) {
-                            const lowercaseFilename = filename.toLowerCase();
-                            if (lowercaseFilename.includes(".jsx") || lowercaseFilename.endsWith(".jsx")) {
-                                mainFile = filename;
-                                mainFileContent = extractedFiles[filename];
-                                console.log("Found JSX file:", mainFile);
-                                filesDebugInfo += "\nFound JSX file: " + mainFile;
-                                break;
-                            }
-                        }
-                    }
-
-                    // Then look for any JS file that might contain React components
-                    if (!mainFile) {
-                        for (const filename of Object.keys(extractedFiles)) {
-                            const lowercaseFilename = filename.toLowerCase();
-                            if (lowercaseFilename.includes(".js") || lowercaseFilename.endsWith(".js")) {
-                                const content = extractedFiles[filename];
-                                // Check if it looks like a React component
-                                if (content.includes("React") || content.includes("jsx") || content.includes("<div")) {
-                                    mainFile = filename;
-                                    mainFileContent = content;
-                                    console.log("Found potential React JS file:", mainFile);
-                                    filesDebugInfo += "\nFound potential React JS file: " + mainFile;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    // If still no main file, get the first text-based file that might contain HTML-like content
-                    if (!mainFile) {
-                        for (const filename of Object.keys(extractedFiles)) {
-                            const lowercaseFilename = filename.toLowerCase();
-                            const isTextFile = ['.txt', '.md', '.json', '.js', '.ts', '.css'].some(ext => 
-                                lowercaseFilename.endsWith(ext)
-                            );
-                            
-                            if (isTextFile) {
-                                const content = extractedFiles[filename];
-                                // Check if it has any HTML-like content
-                                if (content.includes("<div") || content.includes("<section") || 
-                                    content.includes("<span") || content.includes("<p>")) {
-                                    mainFile = filename;
-                                    mainFileContent = content;
-                                    console.log("Found file with HTML-like content:", mainFile);
-                                    filesDebugInfo += "\nFound file with HTML-like content: " + mainFile;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    // Last resort - use any text file
-                    if (!mainFile) {
-                        for (const filename of Object.keys(extractedFiles)) {
-                            try {
-                                // Try to parse as text
-                                const content = extractedFiles[filename];
-                                if (typeof content === 'string' && content.length > 0) {
-                                    mainFile = filename;
-                                    mainFileContent = content;
-                                    console.log("Using text file as fallback:", mainFile);
-                                    filesDebugInfo += "\nUsing text file as fallback: " + mainFile;
-                                    break;
-                                }
-                            } catch (e) {
-                                console.log("Skipping non-text file:", filename);
-                            }
-                        }
-                    }
-
-                    if (!mainFile) {
-                        // Create a simple fallback content if nothing is found
-                        mainFile = "fallback.html";
-                        mainFileContent = `<div class="section">
-                            <h1>V0.dev Content</h1>
-                            <p>This is a fallback conversion because no HTML/JSX was found in the ZIP.</p>
-                            <p>Files found in ZIP: ${Object.keys(extractedFiles).join(", ")}</p>
-                        </div>`;
-                        console.log("No suitable files found, using fallback content");
-                        filesDebugInfo += "\nNo suitable files found, using fallback content";
-                    }
+                    
+                    const mainFile = mainFileInfo.file;
+                    const mainFileContent = mainFileInfo.content;
+                    
+                    console.log("Using main file:", mainFile);
                     
                     // Convert to Divi JSON
                     const diviJson = convertToDiviJson(extractedFiles, mainFile, mainFileContent);
@@ -452,21 +353,146 @@
                     processingContainer.classList.add('hidden');
                     
                     // Show more detailed error with file debugging info
-                    showError(`Error: ${error.message || 'Failed to process file'}. Please try again.`);
+                    showError(`${error.message || 'Failed to process file'}. You can try the Force Convert option below.`);
                     
-                    if (window.filesDebugInfo) {
-                        debugText.textContent = window.filesDebugInfo;
-                        fileDebugInfo.classList.remove('hidden');
-                    }
+                    // Show project structure
+                    let structureInfo = "Project files found:\n";
+                    const fileList = Object.keys(extractedFiles);
+                    fileList.sort();
+                    
+                    fileList.forEach(file => {
+                        structureInfo += `• ${file}\n`;
+                    });
+                    
+                    debugText.textContent = structureInfo;
+                    fileDebugInfo.classList.remove('hidden');
                 }
             };
             
             reader.readAsArrayBuffer(fileToUpload);
         }
+        
+        // Function to find main content files in various project structures
+        function findMainContent(extractedFiles) {
+            let filesFound = [];
+            
+            console.log("Searching for content in", Object.keys(extractedFiles).length, "files");
+            
+            // Look for page files in app directory (Next.js structure)
+            for (const filename of Object.keys(extractedFiles)) {
+                if (filename.includes('/app/') && 
+                    (filename.includes('page.js') || filename.includes('page.tsx') || 
+                     filename.includes('page.jsx'))) {
+                    console.log("Found Next.js page file:", filename);
+                    return { file: filename, content: extractedFiles[filename] };
+                }
+            }
+            
+            // Look for index.html files in public directory or at root
+            for (const filename of Object.keys(extractedFiles)) {
+                if ((filename.includes('/public/') || !filename.includes('/')) && 
+                    filename.endsWith('index.html')) {
+                    console.log("Found HTML index file:", filename);
+                    return { file: filename, content: extractedFiles[filename] };
+                }
+            }
+            
+            // Look for component files
+            for (const filename of Object.keys(extractedFiles)) {
+                if (filename.includes('/components/') && 
+                    (filename.endsWith('.js') || filename.endsWith('.jsx') || 
+                     filename.endsWith('.ts') || filename.endsWith('.tsx'))) {
+                    console.log("Found component file:", filename);
+                    filesFound.push({ file: filename, content: extractedFiles[filename] });
+                }
+            }
+            
+            // If components found, use the first one
+            if (filesFound.length > 0) {
+                return filesFound[0];
+            }
+            
+            // Look for any JS/TS files with React syntax
+            for (const filename of Object.keys(extractedFiles)) {
+                if ((filename.endsWith('.js') || filename.endsWith('.jsx') || 
+                     filename.endsWith('.ts') || filename.endsWith('.tsx')) &&
+                    (extractedFiles[filename].includes('import') || 
+                     extractedFiles[filename].includes('export')) && 
+                    (extractedFiles[filename].includes('<div') || 
+                     extractedFiles[filename].includes('React') ||
+                     extractedFiles[filename].includes('function'))) {
+                    console.log("Found React-like file:", filename);
+                    return { file: filename, content: extractedFiles[filename] };
+                }
+            }
+            
+            // Look for any HTML file
+            for (const filename of Object.keys(extractedFiles)) {
+                if (filename.endsWith('.html')) {
+                    console.log("Found HTML file:", filename);
+                    return { file: filename, content: extractedFiles[filename] };
+                }
+            }
+            
+            // Last resort - create a fallback from folder structure
+            let folderStructure = "V0.dev Project Structure:\n";
+            const fileList = Object.keys(extractedFiles);
+            fileList.sort();
+            
+            for (const filename of fileList) {
+                if (!filename.includes('node_modules')) {
+                    folderStructure += `- ${filename}\n`;
+                }
+            }
+            
+            console.log("Using fallback structure");
+            
+            return { 
+                file: "project-structure.txt", 
+                content: `<div class="section">
+                    <h1>V0.dev Project</h1>
+                    <p>This project contains multiple files in a complex structure.</p>
+                    <pre>${folderStructure}</pre>
+                </div>` 
+            };
+        }
+
+        // Force convert function
+        function forceConvert() {
+            // Create fallback content
+            const fileList = Object.keys(extractedFiles).sort();
+            let structureDisplay = fileList.slice(0, 30).map(f => `- ${f}`).join("\n");
+            if (fileList.length > 30) {
+                structureDisplay += `\n... (${fileList.length - 30} more files)`;
+            }
+            
+            const fallbackContent = `<div class="section">
+                <h1>V0.dev Project Structure</h1>
+                <p>This is a conversion of a complex V0.dev project.</p>
+                <div class="section">
+                    <h2>Files in Project</h2>
+                    <pre>${structureDisplay}</pre>
+                </div>
+            </div>`;
+            
+            // Convert using fallback
+            const diviJson = convertToDiviJson(extractedFiles, "fallback.html", fallbackContent);
+            
+            // Create download
+            const jsonString = JSON.stringify(diviJson, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            downloadLink.href = url;
+            downloadLink.setAttribute('download', 'divi_layout.json');
+            
+            // Show result
+            errorContainer.classList.add('hidden');
+            resultContainer.classList.remove('hidden');
+        }
 
         // Convert to Divi JSON
         function convertToDiviJson(files, mainFilename, mainFileContent) {
-            console.log("Starting conversion to Divi JSON");
+            console.log("Starting conversion to Divi JSON from", mainFilename);
             
             // Default Divi structure
             const diviJson = {
@@ -484,11 +510,104 @@
                 }
             };
             
+            // Try to extract content from React components
+            const isReactFile = mainFilename.endsWith('.js') || 
+                                mainFilename.endsWith('.jsx') || 
+                                mainFilename.endsWith('.ts') || 
+                                mainFilename.endsWith('.tsx');
+            
+            // If it's a React file, try to extract JSX content
+            if (isReactFile) {
+                // Very simple JSX extraction - this is not a full parser
+                // For better results, we would need a proper JSX parser
+                let extractedJsx = "";
+                
+                // Extract return statement content
+                const returnMatch = mainFileContent.match(/return\s*\(\s*(<[\s\S]*?>)[\s\S]*?\);/);
+                if (returnMatch && returnMatch[1]) {
+                    // Try to extract the full JSX
+                    const firstTag = returnMatch[1].match(/<(\w+)/)[1];
+                    const startPos = returnMatch.index;
+                    const endRegex = new RegExp(`</${firstTag}>`);
+                    const endMatch = mainFileContent.slice(startPos).match(endRegex);
+                    
+                    if (endMatch) {
+                        extractedJsx = mainFileContent.slice(startPos, startPos + endMatch.index + endMatch[0].length);
+                    } else {
+                        extractedJsx = `<div class="section">
+                            <h2>Component from ${mainFilename}</h2>
+                            <p>JSX content could not be fully extracted.</p>
+                            <pre>${mainFileContent.substring(0, 500)}...</pre>
+                        </div>`;
+                    }
+                } else {
+                    // Fallback to show the file
+                    extractedJsx = `<div class="section">
+                        <h2>Component from ${mainFilename}</h2>
+                        <p>This is a React component file.</p>
+                        <pre>${mainFileContent.substring(0, 500)}...</pre>
+                    </div>`;
+                }
+                
+                mainFileContent = extractedJsx;
+            }
+            
             // Simple parsing of HTML/JSX to identify sections
-            // This is a simplified approach - a proper parser would be more robust
+            let sectionMatches = [];
             
-            // First, try to extract sections using section tags or div with section class
+            // Try different section detection methods
+            // 1. Look for explicit section tags or divs with section class
             const sectionRegex = /<(section|div|header|footer|main)[^>]*class="[^"]*section[^"]*"[^>]*>/gi;
-            let sectionMatches = mainFileContent.split(sectionRegex);
+            const sectionMatches1 = mainFileContent.split(sectionRegex);
             
-            // If
+            // 2. Look for divs with container or wrapper classes
+            const containerRegex = /<(div|section|main)[^>]*class="[^"]*container[^"]*"[^>]*>/gi;
+            const sectionMatches2 = mainFileContent.split(containerRegex);
+            
+            // 3. Look for any top-level div
+            const divRegex = /<div[^>]*>/gi;
+            const sectionMatches3 = mainFileContent.split(divRegex);
+            
+            // Use the method that produced the most meaningful sections
+            if (sectionMatches1.length > 2) {
+                sectionMatches = sectionMatches1;
+                console.log("Using section class detection:", sectionMatches.length, "sections found");
+            } else if (sectionMatches2.length > 2) {
+                sectionMatches = sectionMatches2;
+                console.log("Using container class detection:", sectionMatches.length, "sections found");
+            } else if (sectionMatches3.length > 2) {
+                sectionMatches = sectionMatches3;
+                console.log("Using div detection:", sectionMatches.length, "sections found");
+            } else {
+                // Create a single section with the entire content
+                sectionMatches = ["", mainFileContent];
+                console.log("Using entire content as one section");
+            }
+            
+            let sectionCount = 0;
+            
+            // Process each potential section
+            for (let i = 1; i < sectionMatches.length; i++) {
+                const sectionContent = sectionMatches[i];
+                if (!sectionContent || sectionContent.trim().length < 10) continue;
+                
+                sectionCount++;
+                
+                // Create a Divi section
+                const diviSection = {
+                    "module_type": "section",
+                    "section_id": `section_${sectionCount}`,
+                    "fullwidth": "off",
+                    "specialty": "off",
+                    "background_color": "#ffffff",
+                    "module_id": "",
+                    "module_class": "",
+                    "custom_css": "",
+                    "modules": []
+                };
+                
+                // Parse content for headings, paragraphs, buttons, and images
+                
+                // Extract headings
+                const headingRegex = /<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi;
+                let hea
