@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>V0.dev to Divi Converter (Client-Side)</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        .drop-zone {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        .drop-zone.active {
+            border-color: #3b82f6;
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+        .processing-animation {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <header class="text-center mb-12">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">V0.dev to Divi Converter</h1>
+            <p class="text-gray-600">Upload your V0.dev ZIP export and instantly convert it to a Divi JSON layout</p>
+            <p class="mt-2 text-sm text-blue-600">Client-side version - your files never leave your browser</p>
+        </header>
+
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <div id="upload-container" class="mb-8">
+                <div id="drop-zone" class="drop-zone flex flex-col items-center justify-center h-64 p-6 cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <p class="text-gray-700 font-medium mb-2">Drag & Drop your ZIP file here</p>
+                    <p class="text-gray-500 text-sm">or</p>
+                    <label for="file-input" class="mt-3 inline-flex px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer">
+                        Browse Files
+                    </label>
+                    <input id="file-input" type="file" accept=".zip" class="hidden" />
+                </div>
+                <div id="selected-file" class="hidden mt-4 p-3 bg-gray-100 rounded-md">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span id="file-name" class="text-gray-700"></span>
+                        </div>
+                        <button id="remove-file" class="text-red-500 hover:text-red-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="upload-btn-container" class="text-center hidden">
+                <button id="process-btn" class="px-6 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Process & Convert
+                </button>
+            </div>
+
+            <div id="processing-container" class="hidden">
+                <div class="flex flex-col items-center justify-center py-8">
+                    <div class="processing-animation mb-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-800 mb-2">Converting your file...</h3>
+                    <p class="text-gray-600 text-center max-w-md">Your V0.dev ZIP file is being processed and converted to Divi JSON format.</p>
+                </div>
+                <div id="progress-container" class="w-full bg-gray-200 rounded-full h-2.5 mt-6">
+                    <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 25%"></div>
+                </div>
+            </div>
+
+            <div id="result-container" class="hidden">
+                <div class="border-t border-gray-200 pt-6 mt-6">
+                    <div class="flex items-center justify-center mb-6">
+                        <div class="rounded-full bg-green-100 p-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
+                    </div>
+                    <h3 class="text-lg font-medium text-center text-gray-800 mb-2">Conversion Complete!</h3>
+                    <p class="text-gray-600 text-center mb-6">Your V0.dev file has been successfully converted to Divi JSON format.</p>
+                    
+                    <div id="download-container" class="text-center">
+                        <a id="download-link" href="#" class="inline-flex items-center px-6 py-3 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Download Divi JSON
+                        </a>
+                    </div>
+                    
+                    <div class="mt-8 pt-6 border-t border-gray-200">
+                        <h4 class="text-md font-medium text-gray-700 mb-2">Next Steps:</h4>
+                        <ol class="list-decimal list-inside text-gray-600 space-y-2 pl-4">
+                            <li>Open your WordPress site with Divi Theme</li>
+                            <li>Navigate to Divi Library</li>
+                            <li>Click "Import" and select your downloaded JSON file</li>
+                            <li>Use the imported layout in your Divi pages</li>
+                        </ol>
+                    </div>
+                    
+                    <div class="mt-6 text-center">
+                        <button id="convert-another" class="text-blue-600 font-medium hover:text-blue-800">
+                            Convert Another File
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error-container" class="hidden">
+                <div class="border-t border-gray-200 pt-6 mt-6">
+                    <div class="flex items-center justify-center mb-6">
+                        <div class="rounded-full bg-red-100 p-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                    </div>
+                    <h3 class="text-lg font-medium text-center text-gray-800 mb-2">Conversion Failed</h3>
+                    <p id="error-message" class="text-gray-600 text-center mb-6">There was an error processing your file.</p>
+                    
+                    <div class="mt-6 text-center">
+                        <button id="try-again" class="text-blue-600 font-medium hover:text-blue-800">
+                            Try Again
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const selectedFile = document.getElementById('selected-file');
+        const fileName = document.getElementById('file-name');
+        const removeFileBtn = document.getElementById('remove-file');
+        const uploadBtnContainer = document.getElementById('upload-btn-container');
+        const processBtn = document.getElementById('process-btn');
+        const processingContainer = document.getElementById('processing-container');
+        const progressBar = document.getElementById('progress-bar');
+        const resultContainer = document.getElementById('result-container');
+        const downloadLink = document.getElementById('download-link');
+        const convertAnotherBtn = document.getElementById('convert-another');
+        const errorContainer = document.getElementById('error-container');
+        const errorMessage = document.getElementById('error-message');
+        const tryAgainBtn = document.getElementById('try-again');
+
+        let fileToUpload = null;
+        let lastGeneratedJson = null;
+
+        // Setup event listeners
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('active');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('active');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('active');
+            
+            if (e.dataTransfer.files.length) {
+                handleFileSelection(e.dataTransfer.files[0]);
+            }
+        });
+
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFileSelection(e.target.files[0]);
+            }
+        });
+
+        removeFileBtn.addEventListener('click', () => {
+            resetFileSelection();
+        });
+
+        processBtn.addEventListener('click', () => {
+            if (fileToUpload) {
+                processFile();
+            }
+        });
+
+        convertAnotherBtn.addEventListener('click', () => {
+            resetUI();
+        });
+
+        tryAgainBtn.addEventListener('click', () => {
+            resetUI();
+        });
+
+        // Handle file selection
+        function handleFileSelection(file) {
+            if (!file.name.toLowerCase().endsWith('.zip')) {
+                showError('Please select a ZIP file.');
+                return;
+            }
+
+            fileToUpload = file;
+            fileName.textContent = file.name;
+            selectedFile.classList.remove('hidden');
+            uploadBtnContainer.classList.remove('hidden');
+        }
+
+        // Reset file selection
+        function resetFileSelection() {
+            fileToUpload = null;
+            fileInput.value = '';
+            selectedFile.classList.add('hidden');
+            uploadBtnContainer.classList.add('hidden');
+        }
+
+        // Process file function
+        function processFile() {
+            // Show processing UI
+            document.getElementById('upload-container').classList.add('hidden');
+            uploadBtnContainer.classList.add('hidden');
+            processingContainer.classList.remove('hidden');
+            
+            // Simulate progress
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += 5;
+                if (progress > 90) {
+                    clearInterval(progressInterval);
+                }
+                progressBar.style.width = `${progress}%`;
+            }, 300);
+            
+            // Read and process ZIP
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const zipData = e.target.result;
+                    const zip = new JSZip();
+                    const zipContents = await zip.loadAsync(zipData);
+                    
+                    // Extract the files
+                    const extractedFiles = {};
+                    const filePromises = [];
+                    
+                    Object.keys(zipContents.files).forEach(filename => {
+                        if (!zipContents.files[filename].dir) {
+                            const promise = zipContents.files[filename].async("string")
+                                .then(content => {
+                                    extractedFiles[filename] = content;
+                                    console.log(`Extracted: ${filename}`);
+                                });
+                            filePromises.push(promise);
+                        }
+                    });
+                    
+                    // Wait for all files to be extracted
+                    await Promise.all(filePromises);
+                    console.log("All files extracted successfully");
+                    
+                    // Find the main HTML/JSX file
+                    let mainFile = null;
+                    for (const filename of Object.keys(extractedFiles)) {
+                        if (filename.endsWith("index.html") || filename.endsWith("index.jsx")) {
+                            mainFile = filename;
+                            break;
+                        }
+                    }
+                    
+                    if (!mainFile) {
+                        for (const filename of Object.keys(extractedFiles)) {
+                            if (filename.endsWith(".html") || filename.endsWith(".jsx")) {
+                                mainFile = filename;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (!mainFile) {
+                        throw new Error("No HTML or JSX file found in the ZIP.");
+                    }
+                    
+                    console.log("Main file identified:", mainFile);
+                    
+                    // Convert to Divi JSON
+                    const diviJson = convertToDiviJson(extractedFiles, mainFile);
+                    lastGeneratedJson = diviJson;
+                    
+                    // Complete progress bar
+                    clearInterval(progressInterval);
+                    progressBar.style.width = '100%';
+                    
+                    // Wait a moment to show completed progress
+                    setTimeout(() => {
+                        processingContainer.classList.add('hidden');
+                        resultContainer.classList.remove('hidden');
+                        
+                        // Set download link
+                        const jsonString = JSON.stringify(diviJson, null, 2);
+                        const blob = new Blob([jsonString], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        downloadLink.href = url;
+                        downloadLink.setAttribute('download', 'divi_layout.json');
+                    }, 500);
+                } catch (error) {
+                    clearInterval(progressInterval);
+                    console.error('Error processing file:', error);
+                    processingContainer.classList.add('hidden');
+                    showError(error.message || 'Failed to process file. Please try again.');
+                }
+            };
+            
+            reader.readAsArrayBuffer(fileToUpload);
+        }
+
+        // Convert to Divi JSON
+        function convertToDiviJson(files, mainFilename) {
+            console.log("Starting conversion to Divi JSON");
+            
+            // Default Divi structure
+            const diviJson = {
+                "data": {
+                    "status": "draft",
+                    "title": "V0.dev Converted Layout",
+                    "short_description": "Converted from V0.dev",
+                    "categories": [],
+                    "tags": [],
+                    "layout_type": "layout",
+                    "layout": {
+                        "version": "4.9.4",
+                        "sections": []
+                    }
+                }
+            };
+            
+            const mainFileContent = files[mainFilename];
+            
+            // Simple parsing of HTML/JSX to identify sections
+            // This is a simplified approach - a proper parser would be more robust
+            
+            // Split the content by section-like elements
+            const sectionRegex = /<(section|div|header|footer|main)[^>]*class="[^"]*section[^"]*"[^>]*>/gi;
+            const sectionMatches = mainFileContent.split(sectionRegex);
+            
+            let sectionCount = 0;
+            
+            // Process each potential section
+            for (let i = 1; i < sectionMatches.length; i++) {
+                const sectionContent = sectionMatches[i];
+                sectionCount++;
+                
+                // Create a Divi section
+                const diviSection = {
+                    "module_type": "section",
+                    "section_id": `section_${sectionCount}`,
+                    "fullwidth": "off",
+                    "specialty": "off",
+                    "background_color": "#ffffff",
+                    "module_id": "",
+                    "module_class": "",
+                    "custom_css": "",
+                    "modules": []
+                };
+                
+                // Parse content for headings, paragraphs, buttons, and images
+                
+                // Extract headings
+                const headingRegex = /<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi;
+                let headingMatch;
+                while ((headingMatch = headingRegex.exec(sectionContent)) !== null) {
+                    diviSection.modules.push({
+                        "module_type": "text",
+                        "text_orientation": "left",
+                        "content": headingMatch[0],
+                        "module_id": "",
+                        "module_class": ""
+                    });
+                }
+                
+                // Extract paragraphs
+                const paragraphRegex = /<p[^>]*>(.*?)<\/p>/gi;
+                let paragraphMatch;
+                while ((paragraphMatch = paragraphRegex.exec(sectionContent)) !== null) {
+                    diviSection.modules.push({
+                        "module_type": "text",
+                        "text_orientation": "left",
+                        "content": paragraphMatch[0],
+                        "module_id": "",
+                        "module_class": ""
+                    });
+                }
+                
+                // Extract images
+                const imageRegex = /<img[^>]*src="([^"]*)"[^>]*>/gi;
+                let imageMatch;
+                while ((imageMatch = imageRegex.exec(sectionContent)) !== null) {
+                    diviSection.modules.push({
+                        "module_type": "image",
+                        "src": imageMatch[1],
+                        "alt": "Image",
+                        "title_text": "",
+                        "show_in_lightbox": "off",
+                        "url": "",
+                        "url_new_window": "off",
+                        "use_overlay": "off",
+                        "animation": "off",
+                        "module_id": "",
+                        "module_class": ""
+                    });
+                }
+                
+                // Extract buttons
+                const buttonRegex = /<button[^>]*>(.*?)<\/button>|<a[^>]*class="[^"]*button[^"]*"[^>]*>(.*?)<\/a>/gi;
+                let buttonMatch;
+                while ((buttonMatch = buttonRegex.exec(sectionContent)) !== null) {
+                    const buttonText = buttonMatch[1] || buttonMatch[2] || "Button";
+                    diviSection.modules.push({
+                        "module_type": "button",
+                        "button_text": buttonText.replace(/<[^>]*>/g, ''),
+                        "button_url": "#",
+                        "url_new_window": "off",
+                        "button_alignment": "left",
+                        "background_color": "#2ea3f2",
+                        "text_color": "#ffffff",
+                        "use_icon": "off",
+                        "icon": "%%31%%",
+                        "icon_placement": "right",
+                        "animation": "off",
+                        "custom_button": "off",
+                        "module_id": "",
+                        "module_class": ""
+                    });
+                }
+                
+                // If no modules were found, add a placeholder text module
+                if (diviSection.modules.length === 0) {
+                    diviSection.modules.push({
+                        "module_type": "text",
+                        "text_orientation": "left",
+                        "content": `<div>Section ${sectionCount} Content</div>`,
+                        "module_id": "",
+                        "module_class": ""
+                    });
+                }
+                
+                // Add the section to the layout
+                diviJson.data.layout.sections.push(diviSection);
+            }
+            
+            // If no sections were found, create a default section
+            if (diviJson.data.layout.sections.length === 0) {
+                diviJson.data.layout.sections.push({
+                    "module_type": "section",
+                    "section_id": "section_1",
+                    "fullwidth": "off",
+                    "specialty": "off",
+                    "background_color": "#ffffff",
+                    "module_id": "",
+                    "module_class": "",
+                    "custom_css": "",
+                    "modules": [{
+                        "module_type": "text",
+                        "text_orientation": "left",
+                        "content": "<h2>Converted V0.dev Content</h2><p>This content was automatically converted. You may need to adjust it in the Divi Builder.</p>",
+                        "module_id": "",
+                        "module_class": ""
+                    }]
+                });
+            }
+            
+            console.log(`Conversion completed: ${diviJson.data.layout.sections.length} sections created`);
+            
+            return diviJson;
+        }
+
+        // Show error message
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorContainer.classList.remove('hidden');
+            resultContainer.classList.add('hidden');
+        }
+
+        // Reset UI to initial state
+        function resetUI() {
+            resetFileSelection();
+            document.getElementById('upload-container').classList.remove('hidden');
+            processingContainer.classList.add('hidden');
+            resultContainer.classList.add('hidden');
+            errorContainer.classList.add('hidden');
+            progressBar.style.width = '25%';
+        }
+    </script>
+</body>
+</html>
