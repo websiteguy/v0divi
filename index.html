@@ -136,6 +136,11 @@
                     <h3 class="text-lg font-medium text-center text-gray-800 mb-2">Conversion Failed</h3>
                     <p id="error-message" class="text-gray-600 text-center mb-6">There was an error processing your file.</p>
                     
+                    <div id="file-debug-info" class="bg-gray-100 p-4 rounded-md mb-6 hidden">
+                        <h4 class="text-md font-medium text-gray-700 mb-2">Debug Information:</h4>
+                        <pre id="debug-text" class="text-xs text-gray-600 overflow-auto max-h-40"></pre>
+                    </div>
+                    
                     <div class="mt-6 text-center">
                         <button id="try-again" class="text-blue-600 font-medium hover:text-blue-800">
                             Try Again
@@ -143,6 +148,10 @@
                     </div>
                 </div>
             </div>
+        </div>
+        
+        <div class="text-center text-gray-500 text-xs mt-8">
+            <p>© 2025 V0.dev to Divi Converter | Files processed locally in your browser</p>
         </div>
     </div>
 
@@ -163,6 +172,8 @@
         const errorContainer = document.getElementById('error-container');
         const errorMessage = document.getElementById('error-message');
         const tryAgainBtn = document.getElementById('try-again');
+        const fileDebugInfo = document.getElementById('file-debug-info');
+        const debugText = document.getElementById('debug-text');
 
         let fileToUpload = null;
         let lastGeneratedJson = null;
@@ -260,16 +271,28 @@
                     const zip = new JSZip();
                     const zipContents = await zip.loadAsync(zipData);
                     
+                    console.log("ZIP loaded successfully");
+                    
                     // Extract the files
                     const extractedFiles = {};
                     const filePromises = [];
+                    let filesDebugInfo = "Files in ZIP:\n";
                     
                     Object.keys(zipContents.files).forEach(filename => {
+                        filesDebugInfo += "- " + filename + "\n";
                         if (!zipContents.files[filename].dir) {
                             const promise = zipContents.files[filename].async("string")
                                 .then(content => {
                                     extractedFiles[filename] = content;
                                     console.log(`Extracted: ${filename}`);
+                                })
+                                .catch(err => {
+                                    console.log(`Could not extract ${filename} as text: ${err.message}`);
+                                    return zipContents.files[filename].async("uint8array")
+                                        .then(binaryContent => {
+                                            // Store binary files as a placeholder string
+                                            extractedFiles[filename] = "[Binary content]";
+                                        });
                                 });
                             filePromises.push(promise);
                         }
@@ -281,30 +304,130 @@
                     
                     // Find the main HTML/JSX file
                     let mainFile = null;
+                    let mainFileContent = null;
+
+                    // Debug - log all files found
+                    console.log("Files found in ZIP:", Object.keys(extractedFiles));
+                    filesDebugInfo += "\nExtracted files:\n";
+                    Object.keys(extractedFiles).forEach(file => {
+                        filesDebugInfo += "- " + file + "\n";
+                    });
+
+                    // First try to find index.html or index.jsx
                     for (const filename of Object.keys(extractedFiles)) {
-                        if (filename.endsWith("index.html") || filename.endsWith("index.jsx")) {
+                        const lowercaseFilename = filename.toLowerCase();
+                        if (lowercaseFilename.includes("/index.html") || lowercaseFilename.endsWith("index.html") || 
+                            lowercaseFilename.includes("/index.jsx") || lowercaseFilename.endsWith("index.jsx")) {
                             mainFile = filename;
+                            mainFileContent = extractedFiles[filename];
+                            console.log("Found main index file:", mainFile);
+                            filesDebugInfo += "\nFound main index file: " + mainFile;
                             break;
                         }
                     }
-                    
+
+                    // Then look for any HTML file
                     if (!mainFile) {
                         for (const filename of Object.keys(extractedFiles)) {
-                            if (filename.endsWith(".html") || filename.endsWith(".jsx")) {
+                            const lowercaseFilename = filename.toLowerCase();
+                            if (lowercaseFilename.includes(".html") || lowercaseFilename.endsWith(".html")) {
                                 mainFile = filename;
+                                mainFileContent = extractedFiles[filename];
+                                console.log("Found HTML file:", mainFile);
+                                filesDebugInfo += "\nFound HTML file: " + mainFile;
                                 break;
                             }
                         }
                     }
-                    
+
+                    // Then look for any JSX file
                     if (!mainFile) {
-                        throw new Error("No HTML or JSX file found in the ZIP.");
+                        for (const filename of Object.keys(extractedFiles)) {
+                            const lowercaseFilename = filename.toLowerCase();
+                            if (lowercaseFilename.includes(".jsx") || lowercaseFilename.endsWith(".jsx")) {
+                                mainFile = filename;
+                                mainFileContent = extractedFiles[filename];
+                                console.log("Found JSX file:", mainFile);
+                                filesDebugInfo += "\nFound JSX file: " + mainFile;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Then look for any JS file that might contain React components
+                    if (!mainFile) {
+                        for (const filename of Object.keys(extractedFiles)) {
+                            const lowercaseFilename = filename.toLowerCase();
+                            if (lowercaseFilename.includes(".js") || lowercaseFilename.endsWith(".js")) {
+                                const content = extractedFiles[filename];
+                                // Check if it looks like a React component
+                                if (content.includes("React") || content.includes("jsx") || content.includes("<div")) {
+                                    mainFile = filename;
+                                    mainFileContent = content;
+                                    console.log("Found potential React JS file:", mainFile);
+                                    filesDebugInfo += "\nFound potential React JS file: " + mainFile;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    // If still no main file, get the first text-based file that might contain HTML-like content
+                    if (!mainFile) {
+                        for (const filename of Object.keys(extractedFiles)) {
+                            const lowercaseFilename = filename.toLowerCase();
+                            const isTextFile = ['.txt', '.md', '.json', '.js', '.ts', '.css'].some(ext => 
+                                lowercaseFilename.endsWith(ext)
+                            );
+                            
+                            if (isTextFile) {
+                                const content = extractedFiles[filename];
+                                // Check if it has any HTML-like content
+                                if (content.includes("<div") || content.includes("<section") || 
+                                    content.includes("<span") || content.includes("<p>")) {
+                                    mainFile = filename;
+                                    mainFileContent = content;
+                                    console.log("Found file with HTML-like content:", mainFile);
+                                    filesDebugInfo += "\nFound file with HTML-like content: " + mainFile;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    // Last resort - use any text file
+                    if (!mainFile) {
+                        for (const filename of Object.keys(extractedFiles)) {
+                            try {
+                                // Try to parse as text
+                                const content = extractedFiles[filename];
+                                if (typeof content === 'string' && content.length > 0) {
+                                    mainFile = filename;
+                                    mainFileContent = content;
+                                    console.log("Using text file as fallback:", mainFile);
+                                    filesDebugInfo += "\nUsing text file as fallback: " + mainFile;
+                                    break;
+                                }
+                            } catch (e) {
+                                console.log("Skipping non-text file:", filename);
+                            }
+                        }
+                    }
+
+                    if (!mainFile) {
+                        // Create a simple fallback content if nothing is found
+                        mainFile = "fallback.html";
+                        mainFileContent = `<div class="section">
+                            <h1>V0.dev Content</h1>
+                            <p>This is a fallback conversion because no HTML/JSX was found in the ZIP.</p>
+                            <p>Files found in ZIP: ${Object.keys(extractedFiles).join(", ")}</p>
+                        </div>`;
+                        console.log("No suitable files found, using fallback content");
+                        filesDebugInfo += "\nNo suitable files found, using fallback content";
                     }
                     
-                    console.log("Main file identified:", mainFile);
-                    
                     // Convert to Divi JSON
-                    const diviJson = convertToDiviJson(extractedFiles, mainFile);
+                    const diviJson = convertToDiviJson(extractedFiles, mainFile, mainFileContent);
                     lastGeneratedJson = diviJson;
                     
                     // Complete progress bar
@@ -327,7 +450,14 @@
                     clearInterval(progressInterval);
                     console.error('Error processing file:', error);
                     processingContainer.classList.add('hidden');
-                    showError(error.message || 'Failed to process file. Please try again.');
+                    
+                    // Show more detailed error with file debugging info
+                    showError(`Error: ${error.message || 'Failed to process file'}. Please try again.`);
+                    
+                    if (window.filesDebugInfo) {
+                        debugText.textContent = window.filesDebugInfo;
+                        fileDebugInfo.classList.remove('hidden');
+                    }
                 }
             };
             
@@ -335,7 +465,7 @@
         }
 
         // Convert to Divi JSON
-        function convertToDiviJson(files, mainFilename) {
+        function convertToDiviJson(files, mainFilename, mainFileContent) {
             console.log("Starting conversion to Divi JSON");
             
             // Default Divi structure
@@ -354,162 +484,11 @@
                 }
             };
             
-            const mainFileContent = files[mainFilename];
-            
             // Simple parsing of HTML/JSX to identify sections
             // This is a simplified approach - a proper parser would be more robust
             
-            // Split the content by section-like elements
+            // First, try to extract sections using section tags or div with section class
             const sectionRegex = /<(section|div|header|footer|main)[^>]*class="[^"]*section[^"]*"[^>]*>/gi;
-            const sectionMatches = mainFileContent.split(sectionRegex);
+            let sectionMatches = mainFileContent.split(sectionRegex);
             
-            let sectionCount = 0;
-            
-            // Process each potential section
-            for (let i = 1; i < sectionMatches.length; i++) {
-                const sectionContent = sectionMatches[i];
-                sectionCount++;
-                
-                // Create a Divi section
-                const diviSection = {
-                    "module_type": "section",
-                    "section_id": `section_${sectionCount}`,
-                    "fullwidth": "off",
-                    "specialty": "off",
-                    "background_color": "#ffffff",
-                    "module_id": "",
-                    "module_class": "",
-                    "custom_css": "",
-                    "modules": []
-                };
-                
-                // Parse content for headings, paragraphs, buttons, and images
-                
-                // Extract headings
-                const headingRegex = /<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi;
-                let headingMatch;
-                while ((headingMatch = headingRegex.exec(sectionContent)) !== null) {
-                    diviSection.modules.push({
-                        "module_type": "text",
-                        "text_orientation": "left",
-                        "content": headingMatch[0],
-                        "module_id": "",
-                        "module_class": ""
-                    });
-                }
-                
-                // Extract paragraphs
-                const paragraphRegex = /<p[^>]*>(.*?)<\/p>/gi;
-                let paragraphMatch;
-                while ((paragraphMatch = paragraphRegex.exec(sectionContent)) !== null) {
-                    diviSection.modules.push({
-                        "module_type": "text",
-                        "text_orientation": "left",
-                        "content": paragraphMatch[0],
-                        "module_id": "",
-                        "module_class": ""
-                    });
-                }
-                
-                // Extract images
-                const imageRegex = /<img[^>]*src="([^"]*)"[^>]*>/gi;
-                let imageMatch;
-                while ((imageMatch = imageRegex.exec(sectionContent)) !== null) {
-                    diviSection.modules.push({
-                        "module_type": "image",
-                        "src": imageMatch[1],
-                        "alt": "Image",
-                        "title_text": "",
-                        "show_in_lightbox": "off",
-                        "url": "",
-                        "url_new_window": "off",
-                        "use_overlay": "off",
-                        "animation": "off",
-                        "module_id": "",
-                        "module_class": ""
-                    });
-                }
-                
-                // Extract buttons
-                const buttonRegex = /<button[^>]*>(.*?)<\/button>|<a[^>]*class="[^"]*button[^"]*"[^>]*>(.*?)<\/a>/gi;
-                let buttonMatch;
-                while ((buttonMatch = buttonRegex.exec(sectionContent)) !== null) {
-                    const buttonText = buttonMatch[1] || buttonMatch[2] || "Button";
-                    diviSection.modules.push({
-                        "module_type": "button",
-                        "button_text": buttonText.replace(/<[^>]*>/g, ''),
-                        "button_url": "#",
-                        "url_new_window": "off",
-                        "button_alignment": "left",
-                        "background_color": "#2ea3f2",
-                        "text_color": "#ffffff",
-                        "use_icon": "off",
-                        "icon": "%%31%%",
-                        "icon_placement": "right",
-                        "animation": "off",
-                        "custom_button": "off",
-                        "module_id": "",
-                        "module_class": ""
-                    });
-                }
-                
-                // If no modules were found, add a placeholder text module
-                if (diviSection.modules.length === 0) {
-                    diviSection.modules.push({
-                        "module_type": "text",
-                        "text_orientation": "left",
-                        "content": `<div>Section ${sectionCount} Content</div>`,
-                        "module_id": "",
-                        "module_class": ""
-                    });
-                }
-                
-                // Add the section to the layout
-                diviJson.data.layout.sections.push(diviSection);
-            }
-            
-            // If no sections were found, create a default section
-            if (diviJson.data.layout.sections.length === 0) {
-                diviJson.data.layout.sections.push({
-                    "module_type": "section",
-                    "section_id": "section_1",
-                    "fullwidth": "off",
-                    "specialty": "off",
-                    "background_color": "#ffffff",
-                    "module_id": "",
-                    "module_class": "",
-                    "custom_css": "",
-                    "modules": [{
-                        "module_type": "text",
-                        "text_orientation": "left",
-                        "content": "<h2>Converted V0.dev Content</h2><p>This content was automatically converted. You may need to adjust it in the Divi Builder.</p>",
-                        "module_id": "",
-                        "module_class": ""
-                    }]
-                });
-            }
-            
-            console.log(`Conversion completed: ${diviJson.data.layout.sections.length} sections created`);
-            
-            return diviJson;
-        }
-
-        // Show error message
-        function showError(message) {
-            errorMessage.textContent = message;
-            errorContainer.classList.remove('hidden');
-            resultContainer.classList.add('hidden');
-        }
-
-        // Reset UI to initial state
-        function resetUI() {
-            resetFileSelection();
-            document.getElementById('upload-container').classList.remove('hidden');
-            processingContainer.classList.add('hidden');
-            resultContainer.classList.add('hidden');
-            errorContainer.classList.add('hidden');
-            progressBar.style.width = '25%';
-        }
-    </script>
-</body>
-</html>
+            // If
