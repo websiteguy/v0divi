@@ -3,223 +3,502 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>V0.dev to Divi Converter</title>
+    <title>V0.dev to Divi Converter (Client-Side)</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        .drop-zone {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        .drop-zone.active {
+            border-color: #3b82f6;
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+        .processing-animation {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center">
-    <div class="container max-w-2xl mx-auto p-6 bg-white rounded-lg shadow-lg">
-        <h1 class="text-2xl font-bold text-center mb-6">V0.dev to Divi Converter</h1>
-        
-        <div id="upload-container">
-            <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                <p class="mt-1 text-sm text-gray-600">Drag and drop your V0.dev ZIP file here, or click to select</p>
-                <input id="file-input" type="file" accept=".zip" class="hidden">
-                <button id="browse-btn" class="mt-4 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                    Browse Files
-                </button>
-            </div>
-            <div id="selected-file-info" class="mt-4 hidden">
-                <div class="flex items-center p-4 bg-gray-50 rounded-md">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <header class="text-center mb-12">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">V0.dev to Divi Converter</h1>
+            <p class="text-gray-600">Upload your V0.dev ZIP export and instantly convert it to a Divi JSON layout</p>
+            <p class="mt-2 text-sm text-blue-600">Client-side version - your files never leave your browser</p>
+        </header>
+
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <div id="upload-container" class="mb-8">
+                <div id="drop-zone" class="drop-zone flex flex-col items-center justify-center h-64 p-6 cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                     </svg>
-                    <span id="file-name" class="text-sm text-gray-700"></span>
+                    <p class="text-gray-700 font-medium mb-2">Drag & Drop your ZIP file here</p>
+                    <p class="text-gray-500 text-sm">or</p>
+                    <label for="file-input" class="mt-3 inline-flex px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer">
+                        Browse Files
+                    </label>
+                    <input id="file-input" type="file" accept=".zip" class="hidden" />
                 </div>
-                <button id="convert-btn" class="w-full mt-4 px-4 py-2 bg-green-500 text-white font-medium rounded-md hover:bg-green-600 focus:outline-none focus:ring-2">
-                    Convert to Divi JSON
+                <div id="selected-file" class="hidden mt-4 p-3 bg-gray-100 rounded-md">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span id="file-name" class="text-gray-700"></span>
+                        </div>
+                        <button id="remove-file" class="text-red-500 hover:text-red-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="upload-btn-container" class="text-center hidden">
+                <button id="process-btn" class="px-6 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Process & Convert
                 </button>
+            </div>
+
+            <div id="processing-container" class="hidden">
+                <div class="flex flex-col items-center justify-center py-8">
+                    <div class="processing-animation mb-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-800 mb-2">Converting your file...</h3>
+                    <p class="text-gray-600 text-center max-w-md">Your V0.dev ZIP file is being processed and converted to Divi JSON format.</p>
+                </div>
+                <div id="progress-container" class="w-full bg-gray-200 rounded-full h-2.5 mt-6">
+                    <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 25%"></div>
+                </div>
+            </div>
+
+            <div id="result-container" class="hidden">
+                <div class="border-t border-gray-200 pt-6 mt-6">
+                    <div class="flex items-center justify-center mb-6">
+                        <div class="rounded-full bg-green-100 p-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
+                    </div>
+                    <h3 class="text-lg font-medium text-center text-gray-800 mb-2">Conversion Complete!</h3>
+                    <p class="text-gray-600 text-center mb-6">Your V0.dev file has been successfully converted to Divi JSON format.</p>
+                    
+                    <div id="download-container" class="text-center">
+                        <a id="download-link" href="#" class="inline-flex items-center px-6 py-3 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Download Divi JSON
+                        </a>
+                    </div>
+                    
+                    <div class="mt-8 pt-6 border-t border-gray-200">
+                        <h4 class="text-md font-medium text-gray-700 mb-2">Next Steps:</h4>
+                        <ol class="list-decimal list-inside text-gray-600 space-y-2 pl-4">
+                            <li>Open your WordPress site with Divi Theme</li>
+                            <li>Navigate to Divi Library</li>
+                            <li>Click "Import" and select your downloaded JSON file</li>
+                            <li>Use the imported layout in your Divi pages</li>
+                        </ol>
+                    </div>
+                    
+                    <div class="mt-6 text-center">
+                        <button id="convert-another" class="text-blue-600 font-medium hover:text-blue-800">
+                            Convert Another File
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error-container" class="hidden">
+                <div class="border-t border-gray-200 pt-6 mt-6">
+                    <div class="flex items-center justify-center mb-6">
+                        <div class="rounded-full bg-red-100 p-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                    </div>
+                    <h3 class="text-lg font-medium text-center text-gray-800 mb-2">Conversion Issue</h3>
+                    <p id="error-message" class="text-gray-600 text-center mb-6">There was an error processing your file.</p>
+                    
+                    <div id="file-debug-info" class="bg-gray-100 p-4 rounded-md mb-6 overflow-auto max-h-80">
+                        <h4 class="text-md font-medium text-gray-700 mb-2">Project Structure:</h4>
+                        <pre id="debug-text" class="text-xs text-gray-600 overflow-auto max-h-60"></pre>
+                    </div>
+                    
+                    <div class="mt-4 text-center">
+                        <button id="force-convert" class="px-4 py-2 bg-yellow-600 text-white font-medium rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">
+                            Force Convert Anyway
+                        </button>
+                    </div>
+                    
+                    <div class="mt-6 text-center">
+                        <button id="try-again" class="text-blue-600 font-medium hover:text-blue-800">
+                            Try Again
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
         
-        <div id="loading-container" class="hidden">
-            <div class="flex flex-col items-center justify-center py-8">
-                <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-                <p class="text-gray-600">Converting your file...</p>
-            </div>
-        </div>
-        
-        <div id="result-container" class="hidden">
-            <div class="text-center py-4">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-green-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-                <h2 class="text-xl font-semibold mb-2">Conversion Complete!</h2>
-                <p class="text-gray-600 mb-6">Your file has been converted to Divi format</p>
-                <a id="download-link" download="divi_layout.json" href="#" class="px-4 py-2 bg-blue-500 text-white font-medium rounded-md hover:bg-blue-600">
-                    Download JSON
-                </a>
-                <button id="convert-another" class="mt-4 block w-full text-blue-500 hover:underline">
-                    Convert another file
-                </button>
-            </div>
-        </div>
-        
-        <div id="error-container" class="hidden">
-            <div class="text-center py-4">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-red-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <h2 class="text-xl font-semibold mb-2">Conversion Failed</h2>
-                <p id="error-message" class="text-gray-600 mb-6">There was an error processing your file.</p>
-                <button id="try-again" class="px-4 py-2 bg-blue-500 text-white font-medium rounded-md hover:bg-blue-600">
-                    Try Again
-                </button>
-            </div>
+        <div class="text-center text-gray-500 text-xs mt-8">
+            <p>© 2025 V0.dev to Divi Converter | Files processed locally in your browser</p>
         </div>
     </div>
 
     <script>
         // DOM Elements
-        const uploadContainer = document.getElementById('upload-container');
+        const dropZone = document.getElementById('drop-zone');
         const fileInput = document.getElementById('file-input');
-        const browseBtn = document.getElementById('browse-btn');
-        const selectedFileInfo = document.getElementById('selected-file-info');
+        const selectedFile = document.getElementById('selected-file');
         const fileName = document.getElementById('file-name');
-        const convertBtn = document.getElementById('convert-btn');
-        const loadingContainer = document.getElementById('loading-container');
+        const removeFileBtn = document.getElementById('remove-file');
+        const uploadBtnContainer = document.getElementById('upload-btn-container');
+        const processBtn = document.getElementById('process-btn');
+        const processingContainer = document.getElementById('processing-container');
+        const progressBar = document.getElementById('progress-bar');
         const resultContainer = document.getElementById('result-container');
         const downloadLink = document.getElementById('download-link');
-        const convertAnother = document.getElementById('convert-another');
+        const convertAnotherBtn = document.getElementById('convert-another');
         const errorContainer = document.getElementById('error-container');
         const errorMessage = document.getElementById('error-message');
-        const tryAgain = document.getElementById('try-again');
+        const tryAgainBtn = document.getElementById('try-again');
+        const forceConvertBtn = document.getElementById('force-convert');
+        const fileDebugInfo = document.getElementById('file-debug-info');
+        const debugText = document.getElementById('debug-text');
 
-        // File handling
-        let selectedFile = null;
+        let fileToUpload = null;
+        let extractedFiles = {};
+        let lastGeneratedJson = null;
 
-        // Event listeners
-        browseBtn.addEventListener('click', () => fileInput.click());
-        
-        fileInput.addEventListener('change', () => {
-            if (fileInput.files.length > 0) {
-                selectedFile = fileInput.files[0];
-                fileName.textContent = selectedFile.name;
-                selectedFileInfo.classList.remove('hidden');
+        // Setup event listeners
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('active');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('active');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('active');
+            
+            if (e.dataTransfer.files.length) {
+                handleFileSelection(e.dataTransfer.files[0]);
             }
         });
-        
-        // Handle drag and drop
-        uploadContainer.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadContainer.classList.add('border-blue-500');
+
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
         });
-        
-        uploadContainer.addEventListener('dragleave', () => {
-            uploadContainer.classList.remove('border-blue-500');
-        });
-        
-        uploadContainer.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadContainer.classList.remove('border-blue-500');
-            
-            if (e.dataTransfer.files.length > 0) {
-                selectedFile = e.dataTransfer.files[0];
-                fileName.textContent = selectedFile.name;
-                selectedFileInfo.classList.remove('hidden');
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFileSelection(e.target.files[0]);
             }
         });
+
+        removeFileBtn.addEventListener('click', () => {
+            resetFileSelection();
+        });
+
+        processBtn.addEventListener('click', () => {
+            if (fileToUpload) {
+                processFile();
+            }
+        });
+
+        convertAnotherBtn.addEventListener('click', () => {
+            resetUI();
+        });
+
+        tryAgainBtn.addEventListener('click', () => {
+            resetUI();
+        });
         
-        // Convert button
-        convertBtn.addEventListener('click', () => {
-            if (!selectedFile) return;
+        forceConvertBtn.addEventListener('click', () => {
+            forceConvert();
+        });
+
+        // Handle file selection
+        function handleFileSelection(file) {
+            console.log("File selected:", file.name, file.size, file.type);
             
-            // Show loading
-            uploadContainer.classList.add('hidden');
-            loadingContainer.classList.remove('hidden');
+            if (!file.name.toLowerCase().endsWith('.zip')) {
+                showError('Please select a ZIP file.');
+                return;
+            }
+
+            fileToUpload = file;
+            fileName.textContent = file.name;
+            selectedFile.classList.remove('hidden');
+            uploadBtnContainer.classList.remove('hidden');
+        }
+
+        // Reset file selection
+        function resetFileSelection() {
+            fileToUpload = null;
+            fileInput.value = '';
+            selectedFile.classList.add('hidden');
+            uploadBtnContainer.classList.add('hidden');
+        }
+
+        // Process file function
+        function processFile() {
+            // Show processing UI
+            document.getElementById('upload-container').classList.add('hidden');
+            uploadBtnContainer.classList.add('hidden');
+            processingContainer.classList.remove('hidden');
             
-            // Process the file
-            processZipFile(selectedFile);
-        });
-        
-        // Try again button
-        tryAgain.addEventListener('click', () => {
-            errorContainer.classList.add('hidden');
-            uploadContainer.classList.remove('hidden');
-            selectedFile = null;
-            fileInput.value = '';
-            selectedFileInfo.classList.add('hidden');
-        });
-        
-        // Convert another button
-        convertAnother.addEventListener('click', () => {
-            resultContainer.classList.add('hidden');
-            uploadContainer.classList.remove('hidden');
-            selectedFile = null;
-            fileInput.value = '';
-            selectedFileInfo.classList.add('hidden');
-        });
-        
-        // Process ZIP file
-        function processZipFile(file) {
+            // Simulate progress
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += 5;
+                if (progress > 90) {
+                    clearInterval(progressInterval);
+                }
+                progressBar.style.width = `${progress}%`;
+            }, 300);
+            
+            // Read and process ZIP
             const reader = new FileReader();
-            
-            reader.onload = async (event) => {
+            reader.onload = async function(e) {
                 try {
-                    // Load the ZIP file
+                    const zipData = e.target.result;
                     const zip = new JSZip();
-                    const zipContents = await zip.loadAsync(event.target.result);
+                    const zipContents = await zip.loadAsync(zipData);
                     
-                    // Extract all files
-                    const extractedFiles = {};
+                    console.log("ZIP loaded successfully");
+                    
+                    // Extract the files
+                    extractedFiles = {};
                     const filePromises = [];
+                    let filesDebugInfo = "Files in ZIP:\n";
                     
-                    Object.keys(zipContents.files).forEach((filename) => {
+                    Object.keys(zipContents.files).forEach(filename => {
                         if (!zipContents.files[filename].dir) {
+                            filesDebugInfo += "- " + filename + "\n";
                             const promise = zipContents.files[filename].async("string")
                                 .then(content => {
                                     extractedFiles[filename] = content;
+                                    console.log(`Extracted: ${filename}`);
                                 })
-                                .catch(() => {
-                                    // Skip binary files
+                                .catch(err => {
+                                    console.log(`Could not extract ${filename} as text: ${err.message}`);
+                                    return zipContents.files[filename].async("uint8array")
+                                        .then(binaryContent => {
+                                            // Store binary files as a placeholder string
+                                            extractedFiles[filename] = "[Binary content]";
+                                        });
                                 });
                             filePromises.push(promise);
                         }
                     });
                     
+                    // Wait for all files to be extracted
                     await Promise.all(filePromises);
+                    console.log("All files extracted, count:", Object.keys(extractedFiles).length);
                     
-                    // Create basic Divi structure regardless of content
-                    const diviJson = createDiviJson(extractedFiles);
+                    // Find main content files
+                    const mainFileInfo = findMainContent(extractedFiles);
+                    if (!mainFileInfo) {
+                        throw new Error("Could not find suitable content in the ZIP file");
+                    }
                     
-                    // Create download link
-                    const jsonString = JSON.stringify(diviJson, null, 2);
-                    const blob = new Blob([jsonString], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
+                    const mainFile = mainFileInfo.file;
+                    const mainFileContent = mainFileInfo.content;
                     
-                    downloadLink.href = url;
+                    console.log("Using main file:", mainFile);
                     
-                    // Show result
-                    loadingContainer.classList.add('hidden');
-                    resultContainer.classList.remove('hidden');
+                    // Convert to Divi JSON
+                    const diviJson = convertToDiviJson(extractedFiles, mainFile, mainFileContent);
+                    lastGeneratedJson = diviJson;
                     
+                    // Complete progress bar
+                    clearInterval(progressInterval);
+                    progressBar.style.width = '100%';
+                    
+                    // Wait a moment to show completed progress
+                    setTimeout(() => {
+                        processingContainer.classList.add('hidden');
+                        resultContainer.classList.remove('hidden');
+                        
+                        // Set download link
+                        const jsonString = JSON.stringify(diviJson, null, 2);
+                        const blob = new Blob([jsonString], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        downloadLink.href = url;
+                        downloadLink.setAttribute('download', 'divi_layout.json');
+                    }, 500);
                 } catch (error) {
-                    console.error("Error processing ZIP:", error);
-                    loadingContainer.classList.add('hidden');
-                    errorContainer.classList.remove('hidden');
-                    errorMessage.textContent = "There was an error processing your file: " + error.message;
+                    clearInterval(progressInterval);
+                    console.error('Error processing file:', error);
+                    processingContainer.classList.add('hidden');
+                    
+                    // Show more detailed error with file debugging info
+                    showError(`${error.message || 'Failed to process file'}. You can try the Force Convert option below.`);
+                    
+                    // Show project structure
+                    let structureInfo = "Project files found:\n";
+                    const fileList = Object.keys(extractedFiles);
+                    fileList.sort();
+                    
+                    fileList.forEach(file => {
+                        structureInfo += `• ${file}\n`;
+                    });
+                    
+                    debugText.textContent = structureInfo;
+                    fileDebugInfo.classList.remove('hidden');
                 }
             };
             
-            reader.onerror = () => {
-                loadingContainer.classList.add('hidden');
-                errorContainer.classList.remove('hidden');
-                errorMessage.textContent = "Failed to read the file.";
-            };
-            
-            reader.readAsArrayBuffer(file);
+            reader.readAsArrayBuffer(fileToUpload);
         }
         
-        // Create Divi JSON structure
-        function createDiviJson(files) {
-            // Basic Divi structure
+        // Function to find main content files in various project structures
+        function findMainContent(extractedFiles) {
+            let filesFound = [];
+            
+            console.log("Searching for content in", Object.keys(extractedFiles).length, "files");
+            
+            // Look for page files in app directory (Next.js structure)
+            for (const filename of Object.keys(extractedFiles)) {
+                if (filename.includes('/app/') && 
+                    (filename.includes('page.js') || filename.includes('page.tsx') || 
+                     filename.includes('page.jsx'))) {
+                    console.log("Found Next.js page file:", filename);
+                    return { file: filename, content: extractedFiles[filename] };
+                }
+            }
+            
+            // Look for index.html files in public directory or at root
+            for (const filename of Object.keys(extractedFiles)) {
+                if ((filename.includes('/public/') || !filename.includes('/')) && 
+                    filename.endsWith('index.html')) {
+                    console.log("Found HTML index file:", filename);
+                    return { file: filename, content: extractedFiles[filename] };
+                }
+            }
+            
+            // Look for component files
+            for (const filename of Object.keys(extractedFiles)) {
+                if (filename.includes('/components/') && 
+                    (filename.endsWith('.js') || filename.endsWith('.jsx') || 
+                     filename.endsWith('.ts') || filename.endsWith('.tsx'))) {
+                    console.log("Found component file:", filename);
+                    filesFound.push({ file: filename, content: extractedFiles[filename] });
+                }
+            }
+            
+            // If components found, use the first one
+            if (filesFound.length > 0) {
+                return filesFound[0];
+            }
+            
+            // Look for any JS/TS files with React syntax
+            for (const filename of Object.keys(extractedFiles)) {
+                if ((filename.endsWith('.js') || filename.endsWith('.jsx') || 
+                     filename.endsWith('.ts') || filename.endsWith('.tsx')) &&
+                    (extractedFiles[filename].includes('import') || 
+                     extractedFiles[filename].includes('export')) && 
+                    (extractedFiles[filename].includes('<div') || 
+                     extractedFiles[filename].includes('React') ||
+                     extractedFiles[filename].includes('function'))) {
+                    console.log("Found React-like file:", filename);
+                    return { file: filename, content: extractedFiles[filename] };
+                }
+            }
+            
+            // Look for any HTML file
+            for (const filename of Object.keys(extractedFiles)) {
+                if (filename.endsWith('.html')) {
+                    console.log("Found HTML file:", filename);
+                    return { file: filename, content: extractedFiles[filename] };
+                }
+            }
+            
+            // Last resort - create a fallback from folder structure
+            let folderStructure = "V0.dev Project Structure:\n";
+            const fileList = Object.keys(extractedFiles);
+            fileList.sort();
+            
+            for (const filename of fileList) {
+                if (!filename.includes('node_modules')) {
+                    folderStructure += `- ${filename}\n`;
+                }
+            }
+            
+            console.log("Using fallback structure");
+            
+            return { 
+                file: "project-structure.txt", 
+                content: `<div class="section">
+                    <h1>V0.dev Project</h1>
+                    <p>This project contains multiple files in a complex structure.</p>
+                    <pre>${folderStructure}</pre>
+                </div>` 
+            };
+        }
+
+        // Force convert function
+        function forceConvert() {
+            // Create fallback content
+            const fileList = Object.keys(extractedFiles).sort();
+            let structureDisplay = fileList.slice(0, 30).map(f => `- ${f}`).join("\n");
+            if (fileList.length > 30) {
+                structureDisplay += `\n... (${fileList.length - 30} more files)`;
+            }
+            
+            const fallbackContent = `<div class="section">
+                <h1>V0.dev Project Structure</h1>
+                <p>This is a conversion of a complex V0.dev project.</p>
+                <div class="section">
+                    <h2>Files in Project</h2>
+                    <pre>${structureDisplay}</pre>
+                </div>
+            </div>`;
+            
+            // Convert using fallback
+            const diviJson = convertToDiviJson(extractedFiles, "fallback.html", fallbackContent);
+            
+            // Create download
+            const jsonString = JSON.stringify(diviJson, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            downloadLink.href = url;
+            downloadLink.setAttribute('download', 'divi_layout.json');
+            
+            // Show result
+            errorContainer.classList.add('hidden');
+            resultContainer.classList.remove('hidden');
+        }
+
+        // Convert to Divi JSON
+        function convertToDiviJson(files, mainFilename, mainFileContent) {
+            console.log("Starting conversion to Divi JSON from", mainFilename);
+            
+            // Default Divi structure
             const diviJson = {
                 "data": {
                     "status": "draft",
-                    "title": "V0.dev Conversion",
+                    "title": "V0.dev Converted Layout",
                     "short_description": "Converted from V0.dev",
                     "categories": [],
                     "tags": [],
@@ -231,97 +510,104 @@
                 }
             };
             
-            // Add a single section with project info
-            const fileList = Object.keys(files).sort();
-            let fileCount = fileList.length;
-            let filePreview = fileList.slice(0, 10).join("\n");
+            // Try to extract content from React components
+            const isReactFile = mainFilename.endsWith('.js') || 
+                                mainFilename.endsWith('.jsx') || 
+                                mainFilename.endsWith('.ts') || 
+                                mainFilename.endsWith('.tsx');
             
-            if (fileCount > 10) {
-                filePreview += `\n... and ${fileCount - 10} more files`;
-            }
-            
-            // Look for possible HTML content
-            let htmlContent = "";
-            
-            // First try to find index.html
-            for (const filename of fileList) {
-                if (filename.endsWith('index.html')) {
-                    htmlContent = files[filename];
-                    break;
-                }
-            }
-            
-            // Then try to find any HTML file
-            if (!htmlContent) {
-                for (const filename of fileList) {
-                    if (filename.endsWith('.html')) {
-                        htmlContent = files[filename];
-                        break;
+            // If it's a React file, try to extract JSX content
+            if (isReactFile) {
+                // Very simple JSX extraction - this is not a full parser
+                // For better results, we would need a proper JSX parser
+                let extractedJsx = "";
+                
+                // Extract return statement content
+                const returnMatch = mainFileContent.match(/return\s*\(\s*(<[\s\S]*?>)[\s\S]*?\);/);
+                if (returnMatch && returnMatch[1]) {
+                    // Try to extract the full JSX
+                    const firstTag = returnMatch[1].match(/<(\w+)/)[1];
+                    const startPos = returnMatch.index;
+                    const endRegex = new RegExp(`</${firstTag}>`);
+                    const endMatch = mainFileContent.slice(startPos).match(endRegex);
+                    
+                    if (endMatch) {
+                        extractedJsx = mainFileContent.slice(startPos, startPos + endMatch.index + endMatch[0].length);
+                    } else {
+                        extractedJsx = `<div class="section">
+                            <h2>Component from ${mainFilename}</h2>
+                            <p>JSX content could not be fully extracted.</p>
+                            <pre>${mainFileContent.substring(0, 500)}...</pre>
+                        </div>`;
                     }
-                }
-            }
-            
-            // Try to find React components
-            if (!htmlContent) {
-                for (const filename of fileList) {
-                    if ((filename.endsWith('.jsx') || filename.endsWith('.js')) && 
-                        files[filename].includes('return') && 
-                        files[filename].includes('<div')) {
-                        htmlContent = files[filename];
-                        break;
-                    }
-                }
-            }
-            
-            // Create a basic section
-            const section = {
-                "module_type": "section",
-                "section_id": "v0_conversion",
-                "fullwidth": "off",
-                "specialty": "off",
-                "background_color": "#ffffff",
-                "module_id": "",
-                "module_class": "",
-                "custom_css": "",
-                "modules": [
-                    {
-                        "module_type": "text",
-                        "text_orientation": "left",
-                        "content": `<h2>V0.dev Conversion</h2>
-<p>This content was converted from a V0.dev export containing ${fileCount} files.</p>`,
-                        "module_id": "",
-                        "module_class": ""
-                    }
-                ]
-            };
-            
-            // If we found HTML content, add it as a code module
-            if (htmlContent) {
-                let previewContent = htmlContent.substring(0, 1000);
-                if (htmlContent.length > 1000) {
-                    previewContent += "...";
+                } else {
+                    // Fallback to show the file
+                    extractedJsx = `<div class="section">
+                        <h2>Component from ${mainFilename}</h2>
+                        <p>This is a React component file.</p>
+                        <pre>${mainFileContent.substring(0, 500)}...</pre>
+                    </div>`;
                 }
                 
-                section.modules.push({
-                    "module_type": "code",
-                    "raw_content": previewContent,
-                    "module_id": "",
-                    "module_class": ""
-                });
+                mainFileContent = extractedJsx;
             }
             
-            // Add file list as a code module
-            section.modules.push({
-                "module_type": "code",
-                "raw_content": filePreview,
-                "module_id": "",
-                "module_class": ""
-            });
+            // Simple parsing of HTML/JSX to identify sections
+            let sectionMatches = [];
             
-            diviJson.data.layout.sections.push(section);
+            // Try different section detection methods
+            // 1. Look for explicit section tags or divs with section class
+            const sectionRegex = /<(section|div|header|footer|main)[^>]*class="[^"]*section[^"]*"[^>]*>/gi;
+            const sectionMatches1 = mainFileContent.split(sectionRegex);
             
-            return diviJson;
-        }
-    </script>
-</body>
-</html>
+            // 2. Look for divs with container or wrapper classes
+            const containerRegex = /<(div|section|main)[^>]*class="[^"]*container[^"]*"[^>]*>/gi;
+            const sectionMatches2 = mainFileContent.split(containerRegex);
+            
+            // 3. Look for any top-level div
+            const divRegex = /<div[^>]*>/gi;
+            const sectionMatches3 = mainFileContent.split(divRegex);
+            
+            // Use the method that produced the most meaningful sections
+            if (sectionMatches1.length > 2) {
+                sectionMatches = sectionMatches1;
+                console.log("Using section class detection:", sectionMatches.length, "sections found");
+            } else if (sectionMatches2.length > 2) {
+                sectionMatches = sectionMatches2;
+                console.log("Using container class detection:", sectionMatches.length, "sections found");
+            } else if (sectionMatches3.length > 2) {
+                sectionMatches = sectionMatches3;
+                console.log("Using div detection:", sectionMatches.length, "sections found");
+            } else {
+                // Create a single section with the entire content
+                sectionMatches = ["", mainFileContent];
+                console.log("Using entire content as one section");
+            }
+            
+            let sectionCount = 0;
+            
+            // Process each potential section
+            for (let i = 1; i < sectionMatches.length; i++) {
+                const sectionContent = sectionMatches[i];
+                if (!sectionContent || sectionContent.trim().length < 10) continue;
+                
+                sectionCount++;
+                
+                // Create a Divi section
+                const diviSection = {
+                    "module_type": "section",
+                    "section_id": `section_${sectionCount}`,
+                    "fullwidth": "off",
+                    "specialty": "off",
+                    "background_color": "#ffffff",
+                    "module_id": "",
+                    "module_class": "",
+                    "custom_css": "",
+                    "modules": []
+                };
+                
+                // Parse content for headings, paragraphs, buttons, and images
+                
+                // Extract headings
+                const headingRegex = /<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi;
+                let hea
